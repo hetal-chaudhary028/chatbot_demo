@@ -1,0 +1,164 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Auth / Auth Chatbot</title>
+    <link rel="stylesheet" href="{% static 'chatbot/index.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="chat-container">
+        <header>
+            <h1>Authentication and Authorization Assistant</h1>
+            <p>Learn about identity verification and permission management</p>
+        </header>
+        <div class="example-questions">
+            <select id="example-dropdown">
+                <option value="" disabled selected>Select an example question...</option>
+                <option value="What is authentication?">What is authentication?</option>
+                <option value="What is authorization?">What is authorization?</option>
+                <option value="Difference between authentication and authorization">Difference between authentication and authorization</option>
+                <option value="What is multi-factor authentication?">What is multi-factor authentication?</option>
+                <option value="What is JWT?">What is JWT?</option>
+                <option value="What is a session?">What is a session?</option>
+            </select>
+        </div>
+        <div id="chat-box" class="chat-box">
+            <div class="message bot-message">
+                <p>Hello! I'm your Authentication and Authorization Assistant. Please ask me a question about these topics!</p>
+            </div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Type your question here..." autocomplete="off">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const exampleDropdown = document.getElementById('example-dropdown');
+        let staticKB = {};
+
+        // Fetch static knowledge base
+        fetch("{% static 'chatbot/knowledge_base.json' %}")
+            .then(res => res.json())
+            .then(data => {
+                staticKB = data;
+                console.log("Static KB loaded");
+            })
+            .catch(err => console.error("Could not load static KB:", err));
+
+        function appendMessage(message, isUser) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add(isUser ? 'user-message' : 'bot-message');
+            messageDiv.innerHTML = `<p>${message}</p>`;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            appendMessage(message, true);
+            userInput.value = '';
+
+            const lowerMsg = message.toLowerCase();
+
+            // Special handling for greetings and gratitude
+            if (lowerMsg.includes('hello') || lowerMsg.includes('hi ')) {
+                appendMessage("Hello! How can I help you today with Authentication and Authorization?", false);
+                return;
+            }
+            if (lowerMsg.includes('good morning')) {
+                appendMessage("Good morning! I'm here to help with your Authentication and Authorization questions.", false);
+                return;
+            }
+            if (lowerMsg.includes('thank you') || lowerMsg.includes('thanks')) {
+                appendMessage("You're very welcome! Feel free to ask more if you need help.", false);
+                return;
+            }
+
+            // Handle Yes/No responses for the follow-up question
+            if (lowerMsg === 'yes' || lowerMsg === 'yup' || lowerMsg === 'yeah') {
+                appendMessage("Please continue! I am ready for your next question.", false);
+                return;
+            }
+            if (lowerMsg === 'no' || lowerMsg === 'nope' || lowerMsg === 'nah') {
+                appendMessage("Thank you for using the Authentication and Authorization Assistant! Have a great day!", false);
+                return;
+            }
+
+            // Check static KB first — sort keys longest-first so specific phrases match before short ones
+            let foundMatch = false;
+            let botResponse = "";
+            const sortedKeys = Object.keys(staticKB).sort((a, b) => b.length - a.length);
+
+            for (const key of sortedKeys) {
+                if (lowerMsg.includes(key)) {
+                    botResponse = staticKB[key];
+                    foundMatch = true;
+                    break;
+                }
+            }
+
+            if (foundMatch) {
+                appendMessage(botResponse + "\n\nAnything else to ask?", false);
+                return;
+            }
+
+            // Fallback to Server API if no static match found
+            try {
+                const response = await fetch('/api/chat/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+                botResponse = data.response || "I am sorry, I cannot find the answer to that question. Please ask something else about Authentication and Authorization!";
+                appendMessage(botResponse + "\n\nAnything else to ask?", false);
+                
+            } catch (error) {
+                appendMessage("Error: Could not connect to the server.", false);
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        exampleDropdown.addEventListener('change', () => {
+            if (exampleDropdown.value) {
+                userInput.value = exampleDropdown.value;
+                sendMessage();
+                exampleDropdown.selectedIndex = 0; // Reset dropdown
+            }
+        });
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>
